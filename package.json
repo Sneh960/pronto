@@ -1,0 +1,22 @@
+{
+  "name": "pronto",
+  "version": "0.1.0",
+  "description": "End-of-day cognitive shutdown for developers: save open work, write TOMORROW.md, pause coding agents until morning.",
+  "type": "module",
+  "bin": {
+    "pronto": "./bin/pronto.mjs"
+  },
+  "scripts": {
+    "start": "node bin/pronto.mjs",
+    "test": "node --test tests/"
+  },
+  "files": [
+    "bin",
+    "src",
+    "hooks"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
