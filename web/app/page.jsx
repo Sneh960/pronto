@@ -5,6 +5,25 @@ import { useState } from "react";
 import { CopyButton, ResultBlock } from "./components";
 
 const DEMO_REPO = "vercel/next.js";
+// Real diff from Pronto's own history. Used only when GitHub's anonymous rate
+// limit (shared across Cloudflare IPs) blocks the 1-click repo demo.
+const SAMPLE_DIFF = `diff --git a/src/handoff.mjs b/src/handoff.mjs
+--- a/src/handoff.mjs
++++ b/src/handoff.mjs
+@@ -112,6 +112,8 @@ export function analyze(snapshot) {
+   const todos = [];
+   for (const [file, d] of diffs) {
+     for (const a of d.added) {
++      // TODO: only count TODOs that sit in a comment, not in strings
+       const m = a.text.match(TODO_RE);
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,7 @@
+     "start": "node bin/pronto.mjs",
+-    "test": "node --test tests/"
++    "test": "node --test"
+   },`;
 
 export default function Home() {
   const [repo, setRepo] = useState("");
@@ -12,6 +31,7 @@ export default function Home() {
   const [until, setUntil] = useState("09:00");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [result, setResult] = useState(null);
 
   async function runShutdown(overrides) {
@@ -22,6 +42,7 @@ export default function Home() {
     };
     setLoading(true);
     setError("");
+    setNotice("");
     setResult(null);
     try {
       const res = await fetch("/api/shutdown", {
@@ -32,9 +53,10 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong.");
-        return;
+        return res.status;
       }
       setResult(data);
+      return res.status;
     } catch {
       setError("Network error — could not reach the shutdown API.");
     } finally {
@@ -42,10 +64,14 @@ export default function Home() {
     }
   }
 
-  function runDemo() {
+  async function runDemo() {
     setRepo(DEMO_REPO);
     setDiff("");
-    runShutdown({ repo: DEMO_REPO, diff: "" });
+    const status = await runShutdown({ repo: DEMO_REPO, diff: "" });
+    if (status === 429) {
+      await runShutdown({ repo: "", diff: SAMPLE_DIFF });
+      setNotice("GitHub's anonymous rate limit was hit, so this demo ran on a real diff from Pronto's own repo instead.");
+    }
   }
 
   return (
@@ -134,6 +160,7 @@ export default function Home() {
         </div>
 
         {error ? <div className="error">{error}</div> : null}
+        {notice ? <div className="notice">{notice}</div> : null}
       </div>
 
       {result ? <Results result={result} /> : null}
