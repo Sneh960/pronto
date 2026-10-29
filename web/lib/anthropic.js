@@ -3,9 +3,9 @@
 // analyzer — the site must work end-to-end even with no key configured.
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = process.env.PRONTO_MODEL || "claude-sonnet-5-5";
 const ANTHROPIC_VERSION = "2023-06-01";
-const MAX_TOKENS = 2000;
+const MAX_TOKENS = 8000;
 
 const SYSTEM_PROMPT = `You are Pronto, an end-of-day cognitive shutdown assistant for developers who use AI coding agents.
 You write a single TOMORROW.md file: a calm, honest handoff the developer reads first thing tomorrow so they can close the laptop tonight with nothing held in their head.
@@ -34,6 +34,7 @@ export async function generateTomorrowMd(context, label) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
+        output_config: { effort: "low" },
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -46,7 +47,8 @@ export async function generateTomorrowMd(context, label) {
 
     if (!res.ok) return null;
     const data = await res.json();
-    const text = data?.content?.[0]?.text;
+    // Current models may put a thinking block first; join only the text blocks.
+    const text = (data?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
     return typeof text === "string" && text.trim() ? text.trim() : null;
   } catch {
     return null;
