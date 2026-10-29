@@ -191,8 +191,7 @@ function offlineSections(snapshot, facts) {
       .join('\n');
     if (repo.recentCommits[0]) where += `\n\nLast commit: \`${repo.recentCommits[0]}\``;
   }
-  // A session from another project would be misleading here; it still goes to Claude as context.
-  if (facts.lastRequest && claude.scope === 'project') {
+  if (facts.lastRequest) {
     const quote = redact(facts.lastRequest, { prose: true }).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     where += `\n\nLast thing you asked Claude Code: “${quote.length > 240 ? `${quote.slice(0, 240)}…` : quote}”`;
   }

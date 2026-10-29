@@ -228,17 +228,10 @@ export function readClaudeContext(cwd = process.cwd(), { limit = 10, claudeHome 
   const projectsDir = path.join(claudeHome, 'projects');
   if (!fs.existsSync(projectsDir)) return { found: false, messages: [] };
 
-  // Prefer this project's own sessions; fall back to the newest session anywhere.
-  let source = newestJsonl([projectLogDir(claudeHome, cwd)]);
-  let scope = 'project';
-  if (!source) {
-    const all = fs
-      .readdirSync(projectsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => path.join(projectsDir, d.name));
-    source = newestJsonl(all);
-    scope = 'global';
-  }
+  // Only this project's own sessions: another project's chat would end up in the
+  // note as if it were this repo's work.
+  const source = newestJsonl([projectLogDir(claudeHome, cwd)]);
+  const scope = 'project';
   if (!source) return { found: false, messages: [] };
 
   const messages = [];

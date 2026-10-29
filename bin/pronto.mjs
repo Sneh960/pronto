@@ -100,7 +100,7 @@ async function off({ until, offline }) {
   }
 
   if (claude.found && claude.messages.length) {
-    ok(`Captured ${claude.messages.length} recent Claude Code message(s)${claude.scope === 'global' ? ' (newest session on this machine)' : ''}`);
+    ok(`Captured ${claude.messages.length} recent Claude Code message(s) from this project`);
   }
 
   let agentPause = null;
