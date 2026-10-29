@@ -4,8 +4,8 @@
 
 Pronto is an end-of-day *cognitive shutdown* command for developers. You run it once when you stop for the day. It captures where you left off, generates a `TOMORROW.md` handoff you'll read in the morning, and locks your AI coding agents (like Claude Code) until 9:00 AM — so your brain, and your evening, can actually close the tab.
 
-> 🔴 **Live web app:** https://pronto-web.vercel.app *(paste any public `owner/repo` or a git diff and watch the real pipeline run — zero login required)*
-> 💻 **CLI:** `node bin/pronto.mjs off --until 09:00`
+> 🔴 **Live web app:** https://pronto.atlanticlow.com (mirror: https://pronto.yashdub3.workers.dev). Paste a git diff or a public `owner/repo` and watch the real pipeline run. No login.
+> 💻 **CLI, one command, nothing to install:** run `npx github:Sneh960/pronto` inside any git repo.
 
 ---
 
@@ -17,7 +17,7 @@ Pronto is an end-of-day *cognitive shutdown* command for developers. You run it 
 
 **Pronto is "a shutdown command."** Operating systems have a shutdown command — a single, deliberate action that saves state and powers down cleanly. Developers never got one. Pronto is that command for your workday:
 
-1. **Saves your open work** — reads your real git diffs, recent commits, and open PRs (`src/git-saver.mjs`).
+1. **Saves your open work** — reads your real git diffs and recent commits, then backs them up without touching your working tree: a `git stash` checkpoint plus `.pronto/wip-backup.patch` (`src/git-saver.mjs`).
 2. **Writes tomorrow's list** — generates a `TOMORROW.md` cognitive handoff so you can *offload* every open loop instead of carrying it (`src/handoff.mjs`).
 3. **Pauses your agents until morning** — installs a real Claude Code hook that blocks agent tool calls until your chosen wake time (`src/agent-pause.mjs` + `hooks/claude-guard.mjs`).
 
@@ -43,6 +43,15 @@ The only thing Pronto measures is whether your open loops are *closed* — writt
 
 ### Option A — the CLI (shut down from your terminal)
 
+Zero install. Run it inside any git repo:
+
+```bash
+npx github:Sneh960/pronto            # save work, write TOMORROW.md, lock agents until 09:00
+npx github:Sneh960/pronto resume     # morning: unlock agents, show your first 10 minutes
+```
+
+Or from a clone:
+
 ```bash
 # 1. Clone and enter
 git clone https://github.com/Sneh960/pronto.git
@@ -65,7 +74,7 @@ That's it. After `off`, a `TOMORROW.md` sits in your repo and your Claude Code a
 
 ### Option B — the live web app (try it with zero install)
 
-Open **https://pronto-web.vercel.app**, then either:
+Open **https://pronto.atlanticlow.com**, then either:
 
 - paste any public repo (e.g. `vercel/next.js`) and click **Run my shutdown**, or
 - hit **⚡ 1-Click Live Test with a Real Repo** to watch the full real pipeline — GitHub fetch → analysis → generated `TOMORROW.md` + Claude Code hook config + CLI one-liner — execute in one click.
@@ -82,10 +91,12 @@ Everything is real: real git data, the real public GitHub REST API, a real Anthr
 | --- | --- |
 | `bin/pronto.mjs` | The CLI entrypoint. Zero-build Node.js ESM — runs directly with `node bin/pronto.mjs`. Dispatches `off`, `status`, `resume`. |
 | `src/git-saver.mjs` | Saves your open work by reading real `git` diffs, staged/unstaged changes, recent commits, and branch state. |
-| `src/handoff.mjs` | Generates the `TOMORROW.md` cognitive handoff. Calls the Anthropic API (`claude-sonnet-4-20250514`) when `ANTHROPIC_API_KEY` is set, and falls back to a real deterministic diff-analyzer otherwise. |
-| `src/agent-pause.mjs` | Writes the lock (`~/.pronto/lock.json`) and installs the hook into `.claude/settings.json` so Claude Code agents are paused until your wake time. |
+| `src/handoff.mjs` | Generates the `TOMORROW.md` cognitive handoff. Calls the Anthropic API (`claude-sonnet-5-5`) when `ANTHROPIC_API_KEY` is set, and falls back to a real deterministic diff-analyzer otherwise. Redacts secrets before sending or writing. |
+| `src/agent-pause.mjs` | Writes the lock (`.pronto/lock.json` in your repo) and installs the hook into `.claude/settings.json` so Claude Code agents are paused until your wake time. |
 | `hooks/claude-guard.mjs` | The guard the hook runs. On every Claude Code `PreToolUse` it checks the lock and exits non-zero (blocking the tool call) while you're in off-hours. Fails open if there's no lock. |
-| `tests/e2e.test.mjs` | Automated end-to-end tests that drive the real commands and assert on real outputs — proof nothing is faked or mocked. |
+| `src/storage.mjs` | Archives every shutdown (note, patch, state) to `.pronto/history/<date>/` and prunes entries older than 14 days. |
+| `src/display.mjs` | Renders `TOMORROW.md` in the terminal for `pronto status` and `pronto resume`. |
+| `tests/*.test.mjs` | Automated end-to-end tests that drive the real commands and assert on real outputs — proof nothing is faked or mocked. |
 | `web/` | The live Next.js web app. `web/app/api/shutdown/route.js` is the real API route that fetches live GitHub data, calls Anthropic (with the deterministic fallback), and returns the downloadable `TOMORROW.md`, the `.claude/settings.json` hook config, the guard script, the lock file, and the CLI one-liner. |
 
 ### The shutdown flow, step by step
@@ -93,9 +104,10 @@ Everything is real: real git data, the real public GitHub REST API, a real Anthr
 ```
 node bin/pronto.mjs off --until 09:00
         │
-        ├─ src/git-saver.mjs   → reads real diffs, commits, open PRs
+        ├─ src/git-saver.mjs   → reads real diffs + commits, backs them up (stash + patch)
         ├─ src/handoff.mjs     → writes TOMORROW.md (Anthropic or deterministic analyzer)
-        └─ src/agent-pause.mjs → writes ~/.pronto/lock.json + wires .claude/settings.json
+        ├─ src/agent-pause.mjs → writes .pronto/lock.json + wires .claude/settings.json
+        └─ src/storage.mjs     → archives tonight to .pronto/history/
                                       │
                                       ▼
    Next time an agent runs → hooks/claude-guard.mjs blocks it until 09:00 🌙
@@ -106,11 +118,11 @@ node bin/pronto.mjs off --until 09:00
 ```bash
 cd web
 npm install
-npm run build     # verified: zero errors, ready for Vercel
 npm run dev       # http://localhost:3000
+npm run deploy    # build + deploy to Cloudflare Workers (OpenNext adapter, see web/wrangler.jsonc)
 ```
 
-**Deploy to Vercel:** import the repo and set the **Root Directory** to `web`. Optionally set `ANTHROPIC_API_KEY` (for Claude-written handoffs) and `GITHUB_TOKEN` (for higher GitHub rate limits) as environment variables — the app works fully without either, using the deterministic analyzer and unauthenticated GitHub access.
+Optional secrets: `npx wrangler secret put ANTHROPIC_API_KEY` (Claude-written handoffs) and `GITHUB_TOKEN` (GitHub rate limits are shared on Cloudflare's IPs, so set this for the repo input). Without them, the pasted-diff path still works fully with the deterministic analyzer.
 
 ---
 
@@ -118,7 +130,8 @@ npm run dev       # http://localhost:3000
 
 | Env var | Where | Required? | Effect |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | CLI + web | No | Uses `claude-sonnet-4-20250514` to write `TOMORROW.md`. Without it, the deterministic analyzer runs. |
+| `ANTHROPIC_API_KEY` | CLI + web | No | Uses `claude-sonnet-5-5` to write `TOMORROW.md`. Without it, the deterministic analyzer runs. |
+| `PRONTO_MODEL` | CLI + web | No | Overrides the model. |
 | `GITHUB_TOKEN` | web | No | Raises the GitHub REST rate limit. Without it, unauthenticated access is used. |
 
 ---
