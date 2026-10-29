@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findRoot, readState, saveOpenWork, writeState } from '../src/git-saver.mjs';
 import { renderRestartNote, renderSection } from '../src/display.mjs';
+import { archiveShutdown, pruneHistory } from '../src/storage.mjs';
 import { extractSection, generateHandoff } from '../src/handoff.mjs';
 
 const VERSION = '0.1.0';
@@ -144,6 +145,10 @@ async function off({ until, offline }) {
       },
     });
   }
+
+  const archived = archiveShutdown(root, { savedAt: now });
+  pruneHistory(root);
+  detail(`archived to ${rel(archived.dir)}`);
 
   const first = extractSection(handoff.content, 3)?.match(/\*\*First step:\*\* (.*)/)?.[1];
   if (first) console.log(`\n  ${dim('Tomorrow:')} ${first}`);
