@@ -1,0 +1,217 @@
+// Deterministic diff/activity analyzer. This is the "real fallback" that runs
+// when no ANTHROPIC_API_KEY is configured — given the same input it always
+// produces the same TOMORROW.md, and it is genuinely derived from the data.
+
+const TODO_PATTERN = /(TODO|FIXME|HACK|XXX|WIP)\b[:\s-]?(.*)/i;
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Parse a raw `git diff` / terminal log into structured signal.
+export function parseDiff(text) {
+  const lines = (text || "").split("\n");
+  const files = [];
+  const todos = [];
+  let current = null;
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of lines) {
+    const fileMatch = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
+    if (fileMatch) {
+      current = { filename: fileMatch[2], additions: 0, deletions: 0 };
+      files.push(current);
+      continue;
+    }
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) {
+      additions++;
+      if (current) current.additions++;
+      const todo = TODO_PATTERN.exec(line.slice(1));
+      if (todo) todos.push(todo[0].trim());
+    } else if (line.startsWith("-")) {
+      deletions++;
+      if (current) current.deletions++;
+    }
+  }
+
+  // If it wasn't a real diff, still surface any TODO-ish lines from the log.
+  if (files.length === 0) {
+    for (const line of lines) {
+      const todo = TODO_PATTERN.exec(line);
+      if (todo) todos.push(todo[0].trim());
+    }
+  }
+
+  return { files, todos, additions, deletions, lineCount: lines.length };
+}
+
+function section(title, body) {
+  return `## ${title}\n\n${body}\n`;
+}
+
+function bullets(items, empty) {
+  if (!items || items.length === 0) return `_${empty}_`;
+  return items.map((i) => `- ${i}`).join("\n");
+}
+
+// Build TOMORROW.md from GitHub activity (owner/repo path).
+export function tomorrowFromActivity(activity) {
+  const { repo, commits, openPrs, latestCommit } = activity;
+  const head = commits[0];
+
+  const whereYouLeftOff = head
+    ? `You last committed **${head.message}** (\`${head.sha}\`) on \`${repo}\`.`
+    : `No recent commits found on \`${repo}\`.`;
+
+  const recentCommits = bullets(
+    commits.slice(0, 5).map((c) => `\`${c.sha}\` ${c.message} — _${c.author}_`),
+    "No commits in the window."
+  );
+
+  const filesInFlight = bullets(
+    (latestCommit?.files || []).map(
+      (f) => `\`${f.filename}\` (${f.status}, +${f.additions}/-${f.deletions})`
+    ),
+    "No file-level detail available."
+  );
+
+  const openLoops = bullets(
+    openPrs.map(
+      (p) => `PR #${p.number}: ${p.title} — _${p.author}_${p.draft ? " (draft)" : ""}`
+    ),
+    "No open pull requests. Clean slate."
+  );
+
+  const firstMove =
+    openPrs.length > 0
+      ? `Review **PR #${openPrs[0].number} — ${openPrs[0].title}**. It is the oldest open loop.`
+      : head
+        ? `Pick up where \`${head.sha}\` left off: ${head.message}.`
+        : `Open the repo and decide the first small, shippable change.`;
+
+  const reload = bullets(
+    [
+      `Repo: \`${repo}\``,
+      head ? `HEAD: \`${head.sha}\`` : null,
+      `Open PRs: ${openPrs.length}`,
+      `Commits reviewed: ${commits.length}`,
+    ].filter(Boolean),
+    "No context captured."
+  );
+
+  return assemble({
+    repo,
+    whereYouLeftOff,
+    recentCommits,
+    filesInFlight,
+    openLoops,
+    firstMove,
+    reload,
+  });
+}
+
+// Build TOMORROW.md from a pasted diff / terminal log.
+export function tomorrowFromDiff(parsed, label) {
+  const source = label || "pasted diff";
+
+  const whereYouLeftOff =
+    parsed.files.length > 0
+      ? `You had **${parsed.files.length} file(s)** changed (+${parsed.additions}/-${parsed.deletions}) in your ${source}.`
+      : `Captured a ${source} (${parsed.lineCount} lines). No git file headers detected.`;
+
+  const filesInFlight = bullets(
+    parsed.files.map(
+      (f) => `\`${f.filename}\` (+${f.additions}/-${f.deletions})`
+    ),
+    "No files parsed from the input."
+  );
+
+  const openLoops = bullets(
+    parsed.todos.slice(0, 10),
+    "No TODO / FIXME / WIP markers found in the changes."
+  );
+
+  const firstMove =
+    parsed.todos.length > 0
+      ? `Resolve the first loose end: "${parsed.todos[0]}".`
+      : parsed.files.length > 0
+        ? `Re-read \`${parsed.files[0].filename}\` and finish the change in flight.`
+        : `Decide the single next change before opening the editor.`;
+
+  const reload = bullets(
+    [
+      `Source: ${source}`,
+      `Files touched: ${parsed.files.length}`,
+      `Net lines: +${parsed.additions}/-${parsed.deletions}`,
+      `Open markers: ${parsed.todos.length}`,
+    ],
+    "No context captured."
+  );
+
+  return assemble({
+    repo: source,
+    whereYouLeftOff,
+    recentCommits: "_Not applicable for a pasted diff._",
+    filesInFlight,
+    openLoops,
+    firstMove,
+    reload,
+  });
+}
+
+function assemble(parts) {
+  return [
+    `# TOMORROW.md`,
+    ``,
+    `> Cognitive handoff for **${parts.repo}** — generated by Pronto on ${todayISO()}.`,
+    `> Read this first thing tomorrow, then delete it. Tonight is over.`,
+    ``,
+    section("🌙 Where you left off", parts.whereYouLeftOff),
+    section("✅ First move tomorrow", parts.firstMove),
+    section("🔁 Open loops", parts.openLoops),
+    section("📄 Files in flight", parts.filesInFlight),
+    section("🧵 Recent commits", parts.recentCommits),
+    section("🧠 Reload this context", parts.reload),
+    `---`,
+    ``,
+    `_Your agents are paused until morning. Close the laptop._`,
+    ``,
+  ].join("\n");
+}
+
+// Compact, plain-text context fed to the Anthropic model when a key exists.
+export function buildContext(activity, parsed, label) {
+  if (activity) {
+    const lines = [`Repository: ${activity.repo}`, ``, `Recent commits:`];
+    for (const c of activity.commits) {
+      lines.push(`- ${c.sha} ${c.message} (${c.author})`);
+    }
+    lines.push(``, `Open pull requests:`);
+    if (activity.openPrs.length === 0) lines.push(`- none`);
+    for (const p of activity.openPrs) {
+      lines.push(`- #${p.number} ${p.title} (${p.author})`);
+    }
+    if (activity.latestCommit) {
+      lines.push(``, `Files in latest commit (${activity.latestCommit.sha}):`);
+      for (const f of activity.latestCommit.files) {
+        lines.push(`- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  const lines = [
+    `Source: ${label || "pasted diff"}`,
+    `Files changed: ${parsed.files.length}`,
+    `Net lines: +${parsed.additions}/-${parsed.deletions}`,
+    ``,
+    `Files:`,
+    ...parsed.files.map((f) => `- ${f.filename} (+${f.additions}/-${f.deletions})`),
+    ``,
+    `Open markers:`,
+    ...(parsed.todos.length ? parsed.todos.map((t) => `- ${t}`) : ["- none"]),
+  ];
+  return lines.join("\n");
+}
