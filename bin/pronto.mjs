@@ -6,12 +6,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findRoot, readState, saveOpenWork, writeState } from '../src/git-saver.mjs';
+import { renderRestartNote, renderSection } from '../src/display.mjs';
 import { extractSection, generateHandoff } from '../src/handoff.mjs';
 
 const VERSION = '0.1.0';
 const AGENT_PAUSE_PATH = fileURLToPath(new URL('../src/agent-pause.mjs', import.meta.url));
 
-const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
+const useColor = Boolean(process.stdout.isTTY && !process.env.NO_COLOR);
+const width = Math.min(process.stdout.columns || 80, 100);
 const paint = (code) => (s) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : String(s));
 const dim = paint('2');
 const bold = paint('1');
@@ -170,7 +172,7 @@ async function status() {
   if (state.checkpoint?.patchPath) detail(`last backup   ${state.checkpoint.patchPath}`);
 
   const tomorrow = path.join(root, 'TOMORROW.md');
-  if (fs.existsSync(tomorrow)) console.log(`\n${fs.readFileSync(tomorrow, 'utf8')}`);
+  if (fs.existsSync(tomorrow)) console.log(`\n${renderRestartNote(fs.readFileSync(tomorrow, 'utf8'), { color: useColor, width })}`);
   else console.log(`\n  ${dim('No TOMORROW.md yet. Run `pronto` at the end of the day.')}\n`);
 }
 
@@ -190,8 +192,10 @@ async function resume() {
   if (state.shutdown) writeState(root, { shutdown: { ...state.shutdown, active: false, resumedAt: new Date().toISOString() } });
 
   const tomorrow = path.join(root, 'TOMORROW.md');
-  const section = fs.existsSync(tomorrow) ? extractSection(fs.readFileSync(tomorrow, 'utf8'), 3) : null;
-  if (section) console.log(`\n${bold('First 10 Minutes')}\n\n${section}\n`);
+  const section = fs.existsSync(tomorrow)
+    ? renderSection(fs.readFileSync(tomorrow, 'utf8'), 'First 10 Minutes Tomorrow', { color: useColor, width })
+    : null;
+  if (section) console.log(`\n${section}\n`);
   else console.log(`\n  ${dim('No TOMORROW.md found, so there is no checklist to show.')}\n`);
 }
 
