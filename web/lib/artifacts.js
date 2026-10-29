@@ -32,7 +32,7 @@ function buildSettingsJson(until) {
       },
       pronto: {
         lockedUntil: safeUntil,
-        note: "Pronto pauses Claude Code agents until this time. Run `npx pronto resume` to lift early.",
+        note: "Pronto pauses Claude Code agents until this time. Run `npx github:Sneh960/pronto resume` to lift early.",
       },
     },
     null,
@@ -77,7 +77,7 @@ try {
   const until = lock.until || "${safeUntil}";
   if (lock.locked && nowHHMM() < until) {
     console.error(
-      \`\\n  🌙 Pronto is resting until \${until}. Your agents are paused so your evening is yours.\\n     Run \\\`npx pronto resume\\\` to lift the lock early.\\n\`
+      \`\\n  🌙 Pronto is resting until \${until}. Your agents are paused so your evening is yours.\\n     Run \\\`npx github:Sneh960/pronto resume\\\` to lift the lock early.\\n\`
     );
     process.exit(2); // non-zero blocks the tool call in Claude Code
   }
@@ -89,7 +89,7 @@ process.exit(0);
 }
 
 function buildCliCommand(until) {
-  return `npx pronto off --until ${normalizeUntil(until)}`;
+  return `npx github:Sneh960/pronto off --until ${normalizeUntil(until)}`;
 }
 
 export function buildArtifacts(until) {

@@ -9,6 +9,8 @@ import path from 'node:path';
 export const DEFAULT_MODEL = 'claude-sonnet-5-5';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MAX_DIFF_CHARS = 80_000;
+// Works without installing anything; a bare `pronto` is only on PATH after npm link/-g.
+export const RESUME_CMD = 'npx github:Sneh960/pronto resume';
 
 export const SECTION_TITLES = [
   '1. Shutdown Snapshot',
@@ -164,7 +166,7 @@ function snapshotSection(snapshot, { unlockAt, mode }) {
   } else {
     lines.push(`- **Directory:** \`${repo.root}\` (not a git repository, so nothing was backed up)`);
   }
-  lines.push(`- **Agents unlock:** ${unlockAt ? `${formatTime(unlockAt)} (or run \`pronto resume\`)` : 'agent pause module not installed'}`);
+  lines.push(`- **Agents unlock:** ${unlockAt ? `${formatTime(unlockAt)} (or run \`${RESUME_CMD}\`)` : 'agent pause module not installed'}`);
   lines.push(`- **Written by:** ${mode}`);
   return lines.join('\n');
 }
@@ -214,8 +216,8 @@ function offlineSections(snapshot, facts) {
     file: focus?.file ?? '',
     line: focus?.line ?? 1,
     checklist: [
-      'Run `pronto resume` to unlock your agents.',
-      'Run `git status` and confirm the changes listed above are all there.',
+      `Run \`${RESUME_CMD}\` to unlock your agents.`,
+      facts.files.length ? 'Run `git status` and confirm the changes listed above are all there.' : 'Run `git status` to confirm the tree is still clean.',
       focus ? `Re-read \`${focus.file}\` around line ${focus.line} before writing anything new.` : 'Re-read the last commit to reload context.',
       facts.files.length ? 'Decide: commit what is finished, keep going on the rest.' : 'Write the first failing test or TODO for the next task.',
     ],
@@ -311,7 +313,7 @@ async function claudeSections(snapshot, facts, { apiKey, model }) {
 function render(snapshot, sections, { unlockAt, mode }) {
   const { repo } = snapshot;
   const { first } = sections;
-  const commands = [`cd ${shellQuote(repo.root)}`, 'pronto resume'];
+  const commands = [`cd ${shellQuote(repo.root)}`, RESUME_CMD];
   if (repo.isRepo) commands.push('git status');
   if (first.file) commands.push(`code -g ${shellQuote(`${first.file}:${first.line || 1}`)}`);
 

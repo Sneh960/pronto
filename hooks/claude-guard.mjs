@@ -61,7 +61,7 @@ function block(unlockIso) {
   const msg =
     `🛑 Pronto Shutdown Active until ${formatTime(unlockIso)}. ` +
     `Your context is safely stored in TOMORROW.md. Close the terminal and rest. ` +
-    '(Run `npx pronto resume` for emergencies).';
+    '(Run `npx github:Sneh960/pronto resume` for emergencies).';
   process.stderr.write(msg + '\n');
   // git aborts a commit on any non-zero exit; Claude Code treats exit 2 as a
   // blocking error and feeds stderr back to the model.

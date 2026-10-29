@@ -19,7 +19,7 @@ Pronto is an end-of-day *cognitive shutdown* command for developers. You run it 
 
 1. **Saves your open work** — reads your real git diffs and recent commits, then backs them up without touching your working tree: a `git stash` checkpoint plus `.pronto/wip-backup.patch` (`src/git-saver.mjs`).
 2. **Writes tomorrow's list** — generates a `TOMORROW.md` cognitive handoff so you can *offload* every open loop instead of carrying it (`src/handoff.mjs`).
-3. **Pauses your agents until morning** — installs a real Claude Code hook that blocks agent tool calls until your chosen wake time (`src/agent-pause.mjs` + `hooks/claude-guard.mjs`).
+3. **Pauses your agents until morning** — installs a real Claude Code hook that blocks agent tool calls, plus a git pre-commit hook, until your chosen wake time (`src/agent-pause.mjs` + `hooks/claude-guard.mjs`).
 
 You close the laptop knowing nothing is lost and nothing will nag you. That's the whole product.
 
@@ -43,6 +43,8 @@ The only thing Pronto measures is whether your open loops are *closed* — writt
 
 ### Option A — the CLI (shut down from your terminal)
 
+**Needs:** Node 18+ and git. No dependencies, no build step, no API key (set `ANTHROPIC_API_KEY` if you want Claude to write the note).
+
 Zero install. Run it inside any git repo:
 
 ```bash
@@ -60,17 +62,38 @@ cd pronto
 # 2. Prove nothing is mocked — run the end-to-end tests
 npm test
 
-# 3. End your day: save work, write TOMORROW.md, lock agents until 9am
+# 3. Leave some open work so there is something to save (optional, but a fresh clone is clean)
+echo '// TODO: finish the retry logic' >> src/storage.mjs
+
+# 4. End your day: save work, write TOMORROW.md, lock agents until 9am
 node bin/pronto.mjs off --until 09:00
 
-# 4. Check what's locked (silent, no prompts)
+# 5. Check what's locked (silent, no prompts)
 node bin/pronto.mjs status
 
-# 5. Changed your mind? Wake your agents early
+# 6. Changed your mind? Wake your agents early
 node bin/pronto.mjs resume
 ```
 
-That's it. After `off`, a `TOMORROW.md` sits in your repo and your Claude Code agents are paused until 9:00 AM.
+What `off` prints (real output):
+
+```
+pronto · shutting down for the day
+
+  ✓ Saved open work: 1 file(s) on main
+    patch  .pronto/wip-backup.patch
+    stash  7f52c35a7ec1 (git stash list)
+    working tree left exactly as it was
+  ✓ Wrote TOMORROW.md
+  ✓ Agents paused until Fri 09:00 AM
+    archived to .pronto/history/2026-10-29_192858
+
+  Tomorrow: Open `src/storage.mjs` at line 76: you left a TODO there: "finish the retry logic".
+
+  You're done for today. It's all written down.
+```
+
+That's it. `TOMORROW.md` now sits in your repo, and until 9:00 AM Claude Code and `git commit` refuse to run in this repo with a calm "🛑 Pronto Shutdown Active" message. `resume` lifts the lock and prints your first 10 minutes. Your files are never modified; restore the backup any time with `git apply .pronto/wip-backup.patch`.
 
 ### Option B — the live web app (try it with zero install)
 
